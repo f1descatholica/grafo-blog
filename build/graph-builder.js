@@ -1,4 +1,5 @@
 // ============================================================
+// graph-builder.js
 // Monta o grafo completo (posts + entidades) a partir dos posts
 // já normalizados + relações extraídas dos spans.
 // ============================================================
@@ -6,14 +7,15 @@
 var Graph = require('graphology');
 var { extrairSpansDoPost } = require('./span-parser.js');
 
-var PESO_MINIMO_SIMILARIDADE = 2;   // labels em comum mínimas p/ conectar 2 posts
-var TOP_K_SIMILARIDADE_POR_POST = 8; // só as N conexões mais fortes de cada post
-
 function idEntidadeNormalizado(textoId) {
   // Chave de deduplicação: mesmo texto (case-insensitive, sem espaços
   // nas pontas) = mesma entidade, mesmo que o rótulo visível varie
   // ligeiramente de post pra post.
   return 'ent__' + textoId.trim().toLowerCase();
+}
+
+function idTagNormalizado(textoLabel) {
+  return 'tag__' + textoLabel.trim().toLowerCase();
 }
 
 function construirGrafo(posts) {
@@ -91,34 +93,33 @@ function construirGrafo(posts) {
     });
   });
 
-  // ---- Passo 3: similaridade fraca post<->post (labels nativas) ----
-  var paresContados = {}; // evita computar A-B e B-A separadamente
-  for (var i = 0; i < posts.length; i++) {
-    var candidatosSimilares = [];
-    for (var j = 0; j < posts.length; j++) {
-      if (i === j) continue;
-      var a = posts[i], b = posts[j];
-      var labelsA = new Set(a.labels);
-      var comuns = b.labels.filter(function(l) { return labelsA.has(l); });
-      if (comuns.length >= PESO_MINIMO_SIMILARIDADE) {
-        candidatosSimilares.push({ id: b.id, peso: comuns.length });
+  // ---- Passo 3: tag (label nativa) -> post ----
+  // Cada label vira 1 nó próprio; todo post com aquela label ganha
+  // 1 aresta pra ela. Um post pode se conectar a VÁRIAS tags ao
+  // mesmo tempo (uma aresta por label que ele tiver). Sem comparação
+  // par-a-par, sem limiar arbitrário — a proximidade entre posts
+  // emerge naturalmente no ForceAtlas2, por ambos puxarem pro mesmo
+  // nó de tag.
+  posts.forEach(function(post) {
+    post.labels.forEach(function(textoLabel) {
+      var idTag = idTagNormalizado(textoLabel);
+      if (!grafo.hasNode(idTag)) {
+        grafo.addNode(idTag, {
+          label: textoLabel,
+          tipoNo: 'tag',
+          grupo: 'tag'
+        });
       }
-    }
-    candidatosSimilares.sort(function(x, y) { return y.peso - x.peso; });
-    candidatosSimilares.slice(0, TOP_K_SIMILARIDADE_POR_POST).forEach(function(c) {
-      var chavePar = [posts[i].id, c.id].sort().join('||');
-      if (paresContados[chavePar]) return;
-      paresContados[chavePar] = true;
       try {
-        grafo.addEdge(posts[i].id, c.id, {
-          tipoAresta: 'similaridade',
-          texto: 'marcadores em comum',
-          peso: c.peso,
+        grafo.addEdge(idTag, post.id, {
+          tipoAresta: 'tag',
+          texto: 'marca',
+          peso: 1,
           dashes: true
         });
-      } catch (e) { /* aresta duplicada, ignora */ }
+      } catch (e) { /* aresta já existe (multi:true evita erro aqui, mas por segurança) */ }
     });
-  }
+  });
 
   return grafo;
 }
