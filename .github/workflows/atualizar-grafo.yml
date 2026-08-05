@@ -2,8 +2,12 @@ name: Atualizar Grafo de Conhecimento
 
 on:
   schedule:
-    - cron: '0 6 * * *'   # 1x por dia, 06:00 UTC — ajuste se quiser
-  workflow_dispatch:        # também permite rodar manualmente pelo GitHub
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+# ADICIONADO: Necessário para o bot ter permissão de fazer o git push
+permissions:
+  contents: write 
 
 jobs:
   atualizar:
@@ -29,6 +33,8 @@ jobs:
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
+          
           git add dados-grafo-conhecimento.json
+          
           git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
           git push
