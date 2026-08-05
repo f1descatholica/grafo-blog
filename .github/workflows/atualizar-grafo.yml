@@ -1,0 +1,34 @@
+name: Atualizar Grafo de Conhecimento
+
+on:
+  schedule:
+    - cron: '0 6 * * *'   # 1x por dia, 06:00 UTC — ajuste se quiser
+  workflow_dispatch:        # também permite rodar manualmente pelo GitHub
+
+jobs:
+  atualizar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Instalar dependências
+        run: npm install graphology graphology-layout graphology-layout-forceatlas2 cheerio
+        working-directory: grafo-conhecimento/build
+
+      - name: Rodar build
+        run: node main.js
+        working-directory: grafo-conhecimento/build
+
+      - name: Commit do JSON atualizado
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add grafo-conhecimento/dados-grafo-conhecimento.json
+          git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
+          git push
