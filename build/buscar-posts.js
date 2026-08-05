@@ -1,4 +1,5 @@
 // ============================================================
+// build/buscar-posts.js
 // Busca TODOS os posts do blog via feed JSON público do Blogger,
 // paginando automaticamente (o feed limita ~150 por chamada).
 // ============================================================
@@ -6,7 +7,7 @@
 var URL_BASE_BLOG = 'https://f1descatholica.blogspot.com'; // ajuste se o domínio mudar
 var TAMANHO_PAGINA = 150;
 
-async function buscarUmaPagina(indiceInicial) {
+async function buscarUmaPaginaBruta(indiceInicial) {
   var url = URL_BASE_BLOG + '/feeds/posts/default?alt=json' +
     '&max-results=' + TAMANHO_PAGINA +
     '&start-index=' + indiceInicial;
@@ -14,7 +15,10 @@ async function buscarUmaPagina(indiceInicial) {
   if (!resp.ok) throw new Error('Falha ao buscar feed: status ' + resp.status);
   var dados = await resp.json();
   var entradas = (dados.feed && dados.feed.entry) || [];
-  return entradas;
+  var totalResults = (dados.feed && dados.feed.openSearch$totalResults && dados.feed.openSearch$totalResults.$t)
+    ? parseInt(dados.feed.openSearch$totalResults.$t, 10)
+    : Infinity; // se por algum motivo não vier, não trava o loop no total
+  return { entradas: entradas, totalResults: totalResults };
 }
 
 function extrairCampoTexto(campo) {
@@ -26,6 +30,7 @@ function extrairUrlPost(entrada) {
   for (var i = 0; i < links.length; i++) {
     if (links[i].rel === 'alternate') return links[i].href;
   }
+  console.warn('Post sem URL alternate:', entrada.id && entrada.id.$t);
   return null;
 }
 
@@ -57,11 +62,24 @@ function normalizarEntrada(entrada) {
 async function buscarTodosOsPosts() {
   var todos = [];
   var indiceAtual = 1; // feed do Blogger é 1-indexado
+  var totalEsperado = null; // vem do próprio feed na 1ª resposta
+
   while (true) {
-    var pagina = await buscarUmaPagina(indiceAtual);
-    if (pagina.length === 0) break;
+    var respostaBruta = await buscarUmaPaginaBruta(indiceAtual);
+    var pagina = respostaBruta.entradas;
+
+    if (totalEsperado === null) {
+      totalEsperado = respostaBruta.totalResults;
+    }
+
+    if (pagina.length === 0) break; // fim real: página veio vazia
+
     pagina.forEach(function(entrada) { todos.push(normalizarEntrada(entrada)); });
-    if (pagina.length < TAMANHO_PAGINA) break; // última página
+
+    // só encerra se já atingimos o total informado pelo Blogger,
+    // não pelo tamanho da página individual (pode vir truncada)
+    if (todos.length >= totalEsperado) break;
+
     indiceAtual += TAMANHO_PAGINA;
   }
   return todos;
