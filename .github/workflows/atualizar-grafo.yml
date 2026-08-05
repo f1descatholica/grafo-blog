@@ -35,7 +35,7 @@ jobs:
           git config user.email "actions@github.com"
           
           # ATENÇÃO: Garanta que este caminho está correto e bate com a URL do front-end
-          git add grafo-blog/dados-grafo-conhecimento.json
+          git add dados-grafo-conhecimento.json
           
           git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
           git push
