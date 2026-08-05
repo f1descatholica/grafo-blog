@@ -34,7 +34,11 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
-          git add dados-grafo-conhecimento.json
+          # ATENÇÃO: Garanta que este caminho está correto e bate com a URL do front-end
+          git add grafo-blog/dados-grafo-conhecimento.json
           
           git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
           git push
+ 
+      - name: Purgar cache do jsDelivr automaticamente
+        run: curl -s https://purge.jsdelivr.net/gh/f1descatholica/grafo-blog@main/dados-grafo-conhecimento.json
