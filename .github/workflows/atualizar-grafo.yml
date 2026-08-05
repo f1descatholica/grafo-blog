@@ -1,3 +1,5 @@
+
+
 name: Atualizar Grafo de Conhecimento
 
 on:
@@ -19,16 +21,17 @@ jobs:
 
       - name: Instalar dependências
         run: npm install graphology graphology-layout graphology-layout-forceatlas2 cheerio
-        working-directory: grafo-conhecimento/build
+        working-directory: grafo-blog/build
 
       - name: Rodar build
         run: node main.js
-        working-directory: grafo-conhecimento/build
+        working-directory: grafo-blog/build
 
       - name: Commit do JSON atualizado
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          git add grafo-conhecimento/dados-grafo-conhecimento.json
+          git add grafo-blog/dados-grafo-conhecimento.json
           git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
           git push
+		  
