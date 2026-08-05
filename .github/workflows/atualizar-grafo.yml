@@ -19,11 +19,11 @@ jobs:
 
       - name: Instalar dependências
         run: npm install graphology graphology-layout graphology-layout-forceatlas2 cheerio
-        working-directory: grafo-blog/build
+        working-directory: build
 
       - name: Rodar build
         run: node main.js
-        working-directory: grafo-blog/build
+        working-directory: build
 
       - name: Commit do JSON atualizado
         run: |
