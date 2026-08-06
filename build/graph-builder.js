@@ -113,7 +113,7 @@ function construirGrafo(posts) {
       try {
         grafo.addEdge(idTag, post.id, {
           tipoAresta: 'tag',
-          texto: 'marca',
+          texto: '',
           peso: 1,
           dashes: true
         });
