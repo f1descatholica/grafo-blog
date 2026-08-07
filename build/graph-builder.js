@@ -1,3 +1,4 @@
+
 // ============================================================
 // graph-builder.js
 // Monta o grafo completo (posts + entidades) a partir dos posts
@@ -16,6 +17,16 @@ function idEntidadeNormalizado(textoId) {
 
 function idTagNormalizado(textoLabel) {
   return 'tag__' + textoLabel.trim().toLowerCase();
+}
+
+// Normalização p/ RÓTULO VISÍVEL de aresta (diferente da normalização
+// de busca do motor V12, que remove acentos — aqui o texto ainda vai
+// pra tela, então mantém acentuação e pontuação do português).
+function normalizarRotuloArestaSub(texto) {
+  return String(texto || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
 }
 
 function construirGrafo(posts) {
@@ -83,9 +94,15 @@ function construirGrafo(posts) {
       // sem deduplicar — cada span é uma relação própria.
       if (rel.alvo) {
         var idAlvo = garantirNoEntidade(rel.alvo, rel.alvoTipo, rel.alvo);
+        // Prioridade: data-acao explícito (autor decidiu manualmente,
+        // não normalizado) > texto visível do span (normalizado) > ''.
+        // Sem fallback de texto fixo — span vazio e sem data-acao
+        // gera aresta com rótulo vazio (motor V12 já trata '' como
+        // "sem label", nada quebra).
+        var textoArestaRelacao = rel.acao || normalizarRotuloArestaSub(rel.textoVisivel);
         grafo.addEdge(idOrigem, idAlvo, {
           tipoAresta: 'relacao',
-          texto: rel.acao,
+          texto: textoArestaRelacao,
           peso: 2,
           postOrigemId: post.id // referência: de qual post essa relação veio
         });
