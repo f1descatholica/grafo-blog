@@ -1,4 +1,6 @@
+
 // ============================================================
+// build/span-parser.js
 // Extrai, do HTML de um post:
 // 1) spans <span class="no-grafo" data-id data-tipo data-alvo
 //    data-alvo-tipo data-acao> -> relações estruturadas (entidades)
@@ -21,7 +23,10 @@ function extrairSpansDoPost(conteudoHtml) {
       tipo: el.attr('data-tipo') ? el.attr('data-tipo').trim() : null,
       alvo: el.attr('data-alvo') ? el.attr('data-alvo').trim() : null,
       alvoTipo: el.attr('data-alvo-tipo') ? el.attr('data-alvo-tipo').trim() : null,
-      acao: el.attr('data-acao') ? el.attr('data-acao').trim() : 'relaciona-se com',
+      // null (não string vazia) quando ausente — permite ao graph-builder
+      // distinguir "autor definiu data-acao" de "não definiu", sem
+      // fallback de texto fixo aqui.
+      acao: el.attr('data-acao') ? el.attr('data-acao').trim() : null,
       textoVisivel: el.text().trim()
     });
   });
