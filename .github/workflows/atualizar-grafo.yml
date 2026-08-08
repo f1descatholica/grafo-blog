@@ -9,6 +9,14 @@ on:
 permissions:
   contents: write 
 
+# Impede 2 execuções deste workflow rodando ao mesmo tempo (ex: cron
+# disparando enquanto um rerun/dispatch manual ainda está em andamento).
+# Nova execução espera a anterior terminar, em vez de rodar em paralelo
+# e causar corrida de checkout/push como a que gerou o erro relatado.
+concurrency:
+  group: atualizar-grafo-conhecimento
+  cancel-in-progress: false
+
 jobs:
   atualizar:
     runs-on: ubuntu-latest
@@ -38,7 +46,12 @@ jobs:
           git add dados-grafo-conhecimento.json
           
           git diff --staged --quiet || git commit -m "Atualiza grafo de conhecimento (automático)"
+
+          # Se o remoto avançou entre o checkout e este ponto (ex: rerun
+          # de job, ou outro push manual no meio), traz o que mudou lá
+          # e reaplica este commit por cima, em vez de falhar o push.
+          git pull --rebase origin main
           git push
- 
+
       - name: Purgar cache do jsDelivr automaticamente
         run: curl -s https://purge.jsdelivr.net/gh/f1descatholica/grafo-blog@main/dados-grafo-conhecimento.json
