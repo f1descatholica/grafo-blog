@@ -1,4 +1,3 @@
-
 // ============================================================
 // graph-builder.js
 // Monta o grafo completo (posts + entidades) a partir dos posts
@@ -6,7 +5,7 @@
 // ============================================================
 
 var Graph = require('graphology');
-var { extrairSpansDoPost } = require('./span-parser.js');
+var { extrairBlocoGrafoDoPost } = require('./grafo-dados-parser.js');
 
 function idEntidadeNormalizado(textoId) {
   // Chave de deduplicação: mesmo texto (case-insensitive, sem espaços
@@ -33,23 +32,36 @@ function construirGrafo(posts) {
   var grafo = new Graph({ multi: true, allowSelfLoops: false });
   var tiposConhecidosPorEntidade = {}; // idNormalizado -> tipo (primeiro tipo explícito encontrado)
 
-  function garantirNoEntidade(textoId, tipoSugerido, rotuloVisivel) {
+  function garantirNoEntidade(textoId, tipoSugerido, rotuloVisivel, nivelSugerido, corSugerida) {
     var idNorm = idEntidadeNormalizado(textoId);
     if (tipoSugerido && !tiposConhecidosPorEntidade[idNorm]) {
       tiposConhecidosPorEntidade[idNorm] = tipoSugerido;
     }
     if (!grafo.hasNode(idNorm)) {
-      grafo.addNode(idNorm, {
+      var attrsNovoNo = {
         label: rotuloVisivel || textoId,
         tipoNo: 'entidade',
         grupo: tipoSugerido || 'entidade'
-      });
-    } else if (tipoSugerido) {
-      // Entidade já existia sem tipo definido — atualiza assim que
-      // algum span finalmente declarar o tipo dela.
+      };
+      // Campos opcionais do bloco declarativo (ver documentação de
+      // campos reconhecidos) — só aplica se vierem definidos.
+      if (nivelSugerido !== undefined && nivelSugerido !== null) attrsNovoNo.level = nivelSugerido;
+      if (corSugerida) attrsNovoNo.color = corSugerida;
+      grafo.addNode(idNorm, attrsNovoNo);
+    } else {
+      // Entidade já existia (mencionada em outro post) — atualiza
+      // tipo se ainda genérico, e nivel/cor se este post os declarar
+      // e o nó ainda não tiver (1º post a declarar define; evita
+      // sobrescrever decisão anterior de outro post silenciosamente).
       var attrs = grafo.getNodeAttributes(idNorm);
-      if (attrs.grupo === 'entidade' && tipoSugerido !== 'entidade') {
+      if (tipoSugerido && attrs.grupo === 'entidade' && tipoSugerido !== 'entidade') {
         grafo.setNodeAttribute(idNorm, 'grupo', tipoSugerido);
+      }
+      if (nivelSugerido !== undefined && nivelSugerido !== null && attrs.level === undefined) {
+        grafo.setNodeAttribute(idNorm, 'level', nivelSugerido);
+      }
+      if (corSugerida && !attrs.color) {
+        grafo.setNodeAttribute(idNorm, 'color', corSugerida);
       }
     }
     return idNorm;
@@ -68,45 +80,42 @@ function construirGrafo(posts) {
     });
   });
 
-  // ---- Passo 2: spans -> entidades + relações fortes ----
+  // ---- Passo 2: bloco #grafo-dados -> entidades + relações fortes ----
   posts.forEach(function(post) {
-    var relacoes = extrairSpansDoPost(post.conteudoHtml);
-    var idsEntidadesJaMencionadasNestePost = {}; // dedup só da aresta "menciona"
+    var blocoGrafo = extrairBlocoGrafoDoPost(post.conteudoHtml);
+    if (!blocoGrafo) return; // post sem bloco de grafo — pula, não quebra o build
 
-    relacoes.forEach(function(rel) {
-      var idOrigem = garantirNoEntidade(rel.id, rel.tipo, rel.textoVisivel);
+    // Mapa id-declarado-no-post -> id-normalizado-no-grafo, usado
+    // para resolver "de"/"para" das arestas deste mesmo post.
+    var idNormPorIdDeclarado = {};
 
-      // Post -> entidade ("menciona"), deduplicada por post (não
-      // repete a mesma aresta se a entidade aparece várias vezes
-      // no mesmo post).
-      if (!idsEntidadesJaMencionadasNestePost[idOrigem]) {
-        idsEntidadesJaMencionadasNestePost[idOrigem] = true;
-        try {
-          grafo.addEdge(post.id, idOrigem, {
-            tipoAresta: 'mencao',
-            texto: 'menciona',
-            peso: 1
-          });
-        } catch (e) { /* aresta já existe (multi:true evita erro aqui, mas por segurança) */ }
-      }
+    blocoGrafo.nos.forEach(function(no) {
+      var idNorm = garantirNoEntidade(no.id, no.tipo, no.id, no.nivel, no.cor);
+      idNormPorIdDeclarado[no.id] = idNorm;
 
-      // Entidade -> alvo ("relação real"), UMA aresta por menção,
-      // sem deduplicar — cada span é uma relação própria.
-      if (rel.alvo) {
-        var idAlvo = garantirNoEntidade(rel.alvo, rel.alvoTipo, rel.alvo);
-        // Prioridade: data-acao explícito (autor decidiu manualmente,
-        // não normalizado) > texto visível do span (normalizado) > ''.
-        // Sem fallback de texto fixo — span vazio e sem data-acao
-        // gera aresta com rótulo vazio (motor V12 já trata '' como
-        // "sem label", nada quebra).
-        var textoArestaRelacao = rel.acao || normalizarRotuloArestaSub(rel.textoVisivel);
-        grafo.addEdge(idOrigem, idAlvo, {
-          tipoAresta: 'relacao',
-          texto: textoArestaRelacao,
-          peso: 2,
-          postOrigemId: post.id // referência: de qual post essa relação veio
+      // Post -> entidade ("menciona") — 1 por nó declarado no bloco,
+      // equivalente ao que cada span gerava antes.
+      try {
+        grafo.addEdge(post.id, idNorm, {
+          tipoAresta: 'mencao',
+          texto: 'menciona',
+          peso: 1
         });
-      }
+      } catch (e) { /* aresta já existe (multi:true evita erro aqui, mas por segurança) */ }
+    });
+
+    blocoGrafo.arestas.forEach(function(aresta) {
+      var idOrigem = idNormPorIdDeclarado[aresta.de];
+      var idAlvo = idNormPorIdDeclarado[aresta.para];
+      if (!idOrigem || !idAlvo) return; // parser já validou de/para contra "nos", mas por segurança
+
+      grafo.addEdge(idOrigem, idAlvo, {
+        tipoAresta: 'relacao',
+        texto: aresta.rotulo || '', // verbatim, como o autor escreveu — ver nota de decisão
+        peso: 2,
+        dashes: !!aresta.tracejada,
+        postOrigemId: post.id
+      });
     });
   });
 
