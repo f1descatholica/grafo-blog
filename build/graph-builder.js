@@ -32,7 +32,12 @@ function construirGrafo(posts) {
   var grafo = new Graph({ multi: true, allowSelfLoops: false });
   var tiposConhecidosPorEntidade = {}; // idNormalizado -> tipo (primeiro tipo explícito encontrado)
 
-  function garantirNoEntidade(textoId, tipoSugerido, rotuloVisivel, nivelSugerido, corSugerida) {
+  // 2026-08-10: campo "cor" REMOVIDO do fluxo — cor de nó nunca mais
+  // vem do post, sempre segue a regra geral automática por tipo
+  // (aplicarCoresPorTipo, no motor V12). Campos "categoria" e "ano"
+  // ADICIONADOS — já eram esperados pelo motor de exibição para
+  // agrupar/ordenar dentro de um nível, mas não eram gravados aqui.
+  function garantirNoEntidade(textoId, tipoSugerido, rotuloVisivel, nivelSugerido, categoriaSugerida, anoSugerido) {
     var idNorm = idEntidadeNormalizado(textoId);
     if (tipoSugerido && !tiposConhecidosPorEntidade[idNorm]) {
       tiposConhecidosPorEntidade[idNorm] = tipoSugerido;
@@ -43,16 +48,18 @@ function construirGrafo(posts) {
         tipoNo: 'entidade',
         grupo: tipoSugerido || 'entidade'
       };
-      // Campos opcionais do bloco declarativo (ver documentação de
-      // campos reconhecidos) — só aplica se vierem definidos.
+      // Campos opcionais do bloco declarativo — só aplica se vierem
+      // definidos. "cor" não está mais nesta lista de propósito.
       if (nivelSugerido !== undefined && nivelSugerido !== null) attrsNovoNo.level = nivelSugerido;
-      if (corSugerida) attrsNovoNo.color = corSugerida;
+      if (categoriaSugerida !== undefined && categoriaSugerida !== null) attrsNovoNo.categoria = categoriaSugerida;
+      if (anoSugerido !== undefined && anoSugerido !== null) attrsNovoNo.ano = anoSugerido;
       grafo.addNode(idNorm, attrsNovoNo);
     } else {
       // Entidade já existia (mencionada em outro post) — atualiza
-      // tipo se ainda genérico, e nivel/cor se este post os declarar
-      // e o nó ainda não tiver (1º post a declarar define; evita
-      // sobrescrever decisão anterior de outro post silenciosamente).
+      // tipo se ainda genérico, e nivel/categoria/ano se este post os
+      // declarar e o nó ainda não tiver (1º post a declarar define;
+      // evita sobrescrever decisão anterior de outro post
+      // silenciosamente). "cor" não é mais lida do post.
       var attrs = grafo.getNodeAttributes(idNorm);
       if (tipoSugerido && attrs.grupo === 'entidade' && tipoSugerido !== 'entidade') {
         grafo.setNodeAttribute(idNorm, 'grupo', tipoSugerido);
@@ -60,8 +67,11 @@ function construirGrafo(posts) {
       if (nivelSugerido !== undefined && nivelSugerido !== null && attrs.level === undefined) {
         grafo.setNodeAttribute(idNorm, 'level', nivelSugerido);
       }
-      if (corSugerida && !attrs.color) {
-        grafo.setNodeAttribute(idNorm, 'color', corSugerida);
+      if (categoriaSugerida !== undefined && categoriaSugerida !== null && attrs.categoria === undefined) {
+        grafo.setNodeAttribute(idNorm, 'categoria', categoriaSugerida);
+      }
+      if (anoSugerido !== undefined && anoSugerido !== null && attrs.ano === undefined) {
+        grafo.setNodeAttribute(idNorm, 'ano', anoSugerido);
       }
     }
     return idNorm;
@@ -90,7 +100,7 @@ function construirGrafo(posts) {
     var idNormPorIdDeclarado = {};
 
     blocoGrafo.nos.forEach(function(no) {
-      var idNorm = garantirNoEntidade(no.id, no.tipo, no.id, no.nivel, no.cor);
+      var idNorm = garantirNoEntidade(no.id, no.tipo, no.id, no.nivel, no.categoria, no.ano);
       idNormPorIdDeclarado[no.id] = idNorm;
 
       // Post -> entidade ("menciona") — 1 por nó declarado no bloco,
